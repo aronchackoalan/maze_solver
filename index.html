@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Maze Solver</title>
+<style>
+  :root{
+    --bg: #12151b;
+    --panel: #1a1f29;
+    --grid-line: #232a37;
+    --wall: #2a3140;
+    --open: #ffffff;
+    --frontier: #3fd0e0;
+    --frontier-dim: #1f5b63;
+    --path: #f0a63c;
+    --start: #52e07a;
+    --end: #ff5e6c;
+    --text: #cfd6e2;
+    --text-dim: #6c7889;
+    --mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+    --sans: 'Inter', -apple-system, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background: radial-gradient(ellipse at top, #171c26 0%, var(--bg) 60%);
+    color: var(--text);
+    font-family: var(--sans);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding: 28px 16px 40px;
+    min-height:100vh;
+  }
+  h1{
+    font-family: var(--mono);
+    font-size: 15px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin: 0 0 4px;
+    font-weight: 500;
+  }
+  h1 span{ color: var(--frontier); }
+  .subtitle{
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 20px;
+    font-family: var(--mono);
+  }
+  #stage{
+    position:relative;
+    border-radius: 10px;
+    padding: 14px;
+    background: var(--panel);
+    box-shadow: 0 0 0 1px #262d3a, 0 20px 60px -20px rgba(0,0,0,0.6);
+  }
+  #grid{
+    display:grid;
+    gap:1px;
+    background: var(--grid-line);
+    border-radius: 4px;
+    overflow:hidden;
+  }
+  .cell{
+    width: 22px;
+    height: 22px;
+    background: var(--open);
+    transition: background-color 0.15s ease;
+  }
+  .cell.wall{ background: var(--wall); }
+  .cell.frontier{ background: var(--frontier-dim); }
+  .cell.visiting{
+    background: var(--frontier);
+    box-shadow: 0 0 8px 1px rgba(63,208,224,0.6);
+  }
+  .cell.path{
+    background: var(--path);
+    box-shadow: 0 0 8px 1px rgba(240,166,60,0.55);
+  }
+  .cell.start{ background: var(--start); }
+  .cell.end{ background: var(--end); }
+
+  #controls{
+    margin-top: 20px;
+    display:flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content:center;
+    max-width: 640px;
+  }
+  #imageControls{
+    margin-top: 10px;
+    display:flex;
+    flex-wrap: wrap;
+    align-items:center;
+    gap: 10px;
+    justify-content:center;
+    max-width: 640px;
+  }
+  button, select{
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid #2b3342;
+    border-radius: 6px;
+    padding: 9px 14px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+  button:hover, select:hover{ border-color: var(--frontier); color: #fff; }
+  button:disabled{ opacity:0.4; cursor:not-allowed; }
+  button.primary{
+    background: var(--frontier);
+    color: #0b1015;
+    border-color: var(--frontier);
+    font-weight: 600;
+  }
+  button.primary:hover{ filter: brightness(1.08); }
+
+  .row{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  input[type=range]{ accent-color: var(--frontier); }
+  input[type=number]{
+    width: 54px;
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid #2b3342;
+    border-radius: 5px;
+    padding: 6px 6px;
+  }
+  input[type=number]:focus{ outline:none; border-color: var(--frontier); }
+
+  #uploadLabel{
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid #2b3342;
+    border-radius: 6px;
+    padding: 9px 14px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+    display:inline-flex;
+    align-items:center;
+  }
+  #uploadLabel:hover{ border-color: var(--frontier); color:#fff; }
+  #imageInput{
+    /* visually hidden but still keyboard/screen-reader accessible via the label */
+    position:absolute;
+    width:1px; height:1px;
+    overflow:hidden;
+    clip:rect(0,0,0,0);
+    white-space:nowrap;
+  }
+  .row input[type=checkbox]{ accent-color: var(--frontier); }
+  #thresholdValue{ min-width: 26px; text-align:right; color: var(--text); }
+
+  #status{
+    margin-top: 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    min-height: 18px;
+    letter-spacing: 0.02em;
+  }
+  #status .ok{ color: var(--path); }
+  #status .fail{ color: var(--end); }
+
+  .legend{
+    display:flex;
+    gap: 16px;
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    flex-wrap: wrap;
+    justify-content:center;
+  }
+  .legend span{ display:inline-flex; align-items:center; gap:6px; }
+  .swatch{ width:10px; height:10px; border-radius:2px; display:inline-block; }
+</style>
+</head>
+<body>
+
+<h1>maze<span>::</span>solver</h1>
+<div class="subtitle">Find the shortest path using BFS, DFS or A* Algorithm</div>
+
+<div id="stage"><div id="grid"></div></div>
+
+<div class="legend">
+  <span><i class="swatch" style="background:var(--start)"></i>start</span>
+  <span><i class="swatch" style="background:var(--end)"></i>end</span>
+  <span><i class="swatch" style="background:var(--frontier)"></i>exploring</span>
+  <span><i class="swatch" style="background:var(--path)"></i>solution path</span>
+</div>
+
+<div id="controls">
+  <div class="row">
+    rows
+    <input type="number" id="rowsInput" min="5" max="61" step="2" value="21">
+  </div>
+  <div class="row">
+    cols
+    <input type="number" id="colsInput" min="5" max="61" step="2" value="31">
+  </div>
+  <select id="algo">
+    <option value="bfs">BFS (shortest path)</option>
+    <option value="dfs">DFS (any path)</option>
+    <option value="astar">A* (heuristic)</option>
+  </select>
+  <button id="generateBtn">⟳ new maze</button>
+  <button id="solveBtn" class="primary">▶ solve</button>
+  <div class="row">
+    speed
+    <input type="range" id="speed" min="1" max="10" value="6">
+  </div>
+</div>
+
+<div id="imageControls">
+  <label id="uploadLabel" for="imageInput">⬆ upload maze image</label>
+  <input type="file" id="imageInput" accept="image/*">
+  <select id="mazeStyle">
+    <option value="blocks">style: solid blocks</option>
+    <option value="lines">style: thin wall lines</option>
+  </select>
+  <label class="row"><input type="checkbox" id="invertCheckbox"> invert colors</label>
+  <div class="row">
+    threshold
+    <input type="range" id="thresholdInput" min="0" max="255" value="128">
+    <span id="thresholdValue">128</span>
+  </div>
+  <label class="row" id="autoGridRow"><input type="checkbox" id="autoGridCheckbox" checked> auto-detect grid size</label>
+</div>
+
+<div id="status">// generate a maze, then hit solve</div>
+
+<script>
+let ROWS = 21, COLS = 31;
+const gridEl = document.getElementById('grid');
+const statusEl = document.getElementById('status');
+const speedInput = document.getElementById('speed');
+const solveBtn = document.getElementById('solveBtn');
+const generateBtn = document.getElementById('generateBtn');
+const algoSelect = document.getElementById('algo');
+const rowsInput = document.getElementById('rowsInput');
+const colsInput = document.getElementById('colsInput');
+const imageInput = document.getElementById('imageInput');
+const invertCheckbox = document.getElementById('invertCheckbox');
+const thresholdInput = document.getElementById('thresholdInput');
+const thresholdValue = document.getElementById('thresholdValue');
+const mazeStyleSelect = document.getElementById('mazeStyle');
+const autoGridCheckbox = document.getElementById('autoGridCheckbox');
+const autoGridRow = document.getElementById('autoGridRow');
+
+mazeStyleSelect.addEventListener('change', () => {
+  // Auto-grid-size detection only applies to the thin-line style;
+  // the block style needs an exact rows/cols match to downsample against.
+  autoGridRow.style.display = mazeStyleSelect.value === 'lines' ? 'flex' : 'none';
+});
+autoGridRow.style.display = mazeStyleSelect.value === 'lines' ? 'flex' : 'none';
+
+thresholdInput.addEventListener('input', () => {
+  thresholdValue.textContent = thresholdInput.value;
+});
+
+let grid = [];       // 'wall' | 'open'
+let cellEls = [];
+let start = null, end = null;
+let running = false;
+
+// Maze generation needs an odd number of rows/cols to lay out cleanly
+// on the "every other cell is a wall" lattice the backtracker uses.
+function readDimensions(){
+  let r = parseInt(rowsInput.value, 10);
+  let c = parseInt(colsInput.value, 10);
+  if(isNaN(r)) r = 21;
+  if(isNaN(c)) c = 31;
+  r = Math.min(61, Math.max(5, r));
+  c = Math.min(61, Math.max(5, c));
+  if(r % 2 === 0) r += 1;
+  if(c % 2 === 0) c += 1;
+  ROWS = r; COLS = c;
+  rowsInput.value = ROWS;
+  colsInput.value = COLS;
+}
+
+function buildDom(){
+  gridEl.style.gridTemplateColumns = `repeat(${COLS}, 22px)`;
+  gridEl.style.gridTemplateRows = `repeat(${ROWS}, 22px)`;
+  gridEl.innerHTML = '';
+  cellEls = [];
+  for(let r=0;r<ROWS;r++){
+    const row = [];
+    for(let c=0;c<COLS;c++){
+      const el = document.createElement('div');
+      el.className = 'cell';
+      gridEl.appendChild(el);
+      row.push(el);
+    }
+    cellEls.push(row);
+  }
+}
+
+// Randomized DFS backtracker on an odd-sized lattice -> classic "perfect" maze
+function generateMaze(){
+  readDimensions();
+  buildDom();
+
+  grid = Array.from({length: ROWS}, () => Array(COLS).fill('wall'));
+
+  const inBounds = (r,c) => r>0 && r<ROWS-1 && c>0 && c<COLS-1;
+  const startR = 1, startC = 1;
+  grid[startR][startC] = 'open';
+  const stack = [[startR,startC]];
+
+  const dirs = [[-2,0],[2,0],[0,-2],[0,2]];
+
+  while(stack.length){
+    const [r,c] = stack[stack.length-1];
+    const options = [];
+    for(const [dr,dc] of dirs){
+      const nr=r+dr, nc=c+dc;
+      if(inBounds(nr,nc) && grid[nr][nc]==='wall') options.push([nr,nc,dr,dc]);
+    }
+    if(options.length===0){ stack.pop(); continue; }
+    const [nr,nc,dr,dc] = options[Math.floor(Math.random()*options.length)];
+    grid[r + dr/2][c + dc/2] = 'open';
+    grid[nr][nc] = 'open';
+    stack.push([nr,nc]);
+  }
+
+  // Punch a few random extra openings so there's more than one route (less "perfect")
+  for(let i=0;i<Math.floor((ROWS*COLS)*0.03);i++){
+    const r = 1 + Math.floor(Math.random()*(ROWS-2));
+    const c = 1 + Math.floor(Math.random()*(COLS-2));
+    grid[r][c] = 'open';
+  }
+
+  // Randomize start/end among open cells. Every open cell sits on the
+  // backtracker's spanning tree (plus extra openings), so any two open
+  // cells are guaranteed reachable from one another.
+  const openCells = [];
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      if(grid[r][c] === 'open') openCells.push([r,c]);
+    }
+  }
+
+  const pick = () => openCells[Math.floor(Math.random()*openCells.length)];
+
+  start = pick();
+  end = pick();
+  // Avoid a trivial same-cell or right-next-to-each-other start/end: retry
+  // a few times to bias toward a more interesting minimum separation.
+  let attempts = 0;
+  const minSeparation = Math.max(4, Math.floor((ROWS+COLS)/4));
+  while(
+    attempts < 30 &&
+    (Math.abs(start[0]-end[0]) + Math.abs(start[1]-end[1])) < minSeparation
+  ){
+    end = pick();
+    attempts++;
+  }
+
+  render();
+  statusEl.innerHTML = '// maze generated — hit solve';
+}
+
+// --------------------------------------------------------------------
+// Load a maze from an uploaded image
+// --------------------------------------------------------------------
+
+imageInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const img = new Image();
+  img.onload = () => {
+    if(mazeStyleSelect.value === 'lines'){
+      loadMazeFromImageLines(img);
+    } else {
+      loadMazeFromImageBlocks(img);
+    }
+    URL.revokeObjectURL(img.src);
+  };
+  img.onerror = () => {
+    statusEl.innerHTML = '<span class="fail">// could not read that image file</span>';
+  };
+  img.src = URL.createObjectURL(file);
+});
+
+// --------------------------------------------------------------------
+// Shared image-parsing helpers, used by both the "solid blocks" and
+// "thin wall lines" loaders below.
+// --------------------------------------------------------------------
+
+function buildWallMask(img, maxDim){
+  let width = img.naturalWidth, height = img.naturalHeight;
+  if(Math.max(width, height) > maxDim){
+    const scale = maxDim / Math.max(width, height);
+    width = Math.round(width * scale);
+    height = Math.round(height * scale);
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, width, height);
+  const data = ctx.getImageData(0, 0, width, height).data;
+
+  const invert = invertCheckbox.checked;
+  const threshold = Number(thresholdInput.value);
+
+  const mask = new Uint8Array(width * height); // 1 = wall pixel
+  for(let i=0, p=0; i<data.length; i+=4, p++){
+    const gray = 0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2];
+    mask[p] = (invert ? gray > threshold : gray < threshold) ? 1 : 0;
+  }
+  return { mask, width, height, canvas };
+}
+
+// Bounding box around the maze's actual border, robust to stray dark
+// pixels elsewhere in the image (e.g. "To 7A-3" style page-reference
+// labels next to the maze). A continuous border row/col is dark across
+// nearly its full length, while text is sparse by comparison, so
+// rows/cols are only kept if their dark-pixel count clears half of the
+// strongest row's/column's count.
+function findBoundingBox(mask, width, height){
+  const rowSums = new Float64Array(height);
+  const colSums = new Float64Array(width);
+  for(let y=0;y<height;y++){
+    let sum = 0;
+    const base = y*width;
+    for(let x=0;x<width;x++) sum += mask[base+x];
+    rowSums[y] = sum;
+  }
+  for(let x=0;x<width;x++){
+    let sum = 0;
+    for(let y=0;y<height;y++) sum += mask[y*width+x];
+    colSums[x] = sum;
+  }
+  const maxRow = Math.max(...rowSums), maxCol = Math.max(...colSums);
+  if(maxRow === 0 || maxCol === 0) return null;
+
+  let top=null, bottom=null, left=null, right=null;
+  for(let y=0;y<height;y++){ if(rowSums[y] > maxRow*0.5){ if(top===null) top=y; bottom=y; } }
+  for(let x=0;x<width;x++){ if(colSums[x] > maxCol*0.5){ if(left===null) left=x; right=x; } }
+  if(top===null || left===null) return null;
+  return { top, bottom, left, right };
+}
+
+// Auto-detect the maze's cell count from the periodic spacing of wall
+// lines in the row/col wall-pixel projection profiles. Not every grid
+// line has a full wall segment (it's a maze, not a grid), so this
+// looks for the smallest recurring spacing rather than assuming every
+// line appears, and uses the span between the first/last detected
+// line (not the raw bounding-box size, which includes the border's
+// own thickness and would be off by roughly one cell).
+function detectGridSize(mask, width, box){
+  const { top, bottom, left, right } = box;
+  const h = bottom - top + 1, w = right - left + 1;
+  const rowProfile = new Float64Array(h);
+  const colProfile = new Float64Array(w);
+  for(let y=0;y<h;y++){
+    let sum = 0;
+    const base = (y+top)*width;
+    for(let x=0;x<w;x++) sum += mask[base + (x+left)];
+    rowProfile[y] = sum;
+  }
+  for(let x=0;x<w;x++){
+    let sum = 0;
+    for(let y=0;y<h;y++) sum += mask[(y+top)*width + (x+left)];
+    colProfile[x] = sum;
+  }
+
+  function cellCount(profile){
+    let max = 0;
+    for(const v of profile) if(v > max) max = v;
+    const thresh = max * 0.5;
+    const peaks = [];
+    for(let i=1;i<profile.length-1;i++){
+      if(profile[i] >= thresh && profile[i] >= profile[i-1] && profile[i] >= profile[i+1]) peaks.push(i);
+    }
+    const clustered = [];
+    for(const p of peaks){
+      const last = clustered.length ? clustered[clustered.length-1] : null;
+      if(last && p - last[last.length-1] <= 5){
+        last.push(p);
+      } else {
+        clustered.push([p]);
+      }
+    }
+    const centers = clustered.map(c => Math.round(c.reduce((a,b)=>a+b,0) / c.length));
+    if(centers.length < 2) return null;
+    const diffs = [];
+    for(let i=1;i<centers.length;i++) diffs.push(centers[i]-centers[i-1]);
+    const minDiff = Math.min(...diffs);
+    let base = diffs.filter(d => d <= minDiff*1.3);
+    if(base.length === 0) base = diffs;
+    base.sort((a,b)=>a-b);
+    const cellSize = base[Math.floor(base.length/2)];
+    const span = centers[centers.length-1] - centers[0];
+    return Math.max(1, Math.round(span / cellSize));
+  }
+
+  const rows = cellCount(rowProfile);
+  const cols = cellCount(colProfile);
+  if(!rows || !cols) return null;
+  return { rows, cols };
+}
+
+// Detect gaps in the outer border of a rows x cols grid mapped onto the
+// pixel region described by box. Works for any grid resolution (a
+// doubled lattice of rooms+connectors, or a plain directly-sampled
+// blocks grid). If wallCutoff is null, uses an adaptive threshold
+// relative to the typical (median) border reading instead of a fixed
+// cutoff — different maze rendering styles have very different
+// baseline wall-patch means (a thin wall line reads near 0 just
+// outside a wall, ~0.2-0.3 on one; a thick-walled maze's border
+// patches can read ~0.6 even where solid, with a gap only dipping to
+// ~0.3), so a fixed cutoff tuned for one style can miss gaps in another.
+function findBorderGaps(mask, width, height, box, rows, cols, wallCutoff){
+  const { top, bottom, left, right } = box;
+  const cellH = (bottom - top + 1) / rows;
+  const cellW = (right - left + 1) / cols;
+  const half = Math.max(1, Math.floor(Math.min(cellH, cellW) * 0.15));
+
+  function cellCenter(r, c){
+    return [top + (r + 0.5) * cellH, left + (c + 0.5) * cellW];
+  }
+  function patchMean(y, x){
+    const y0 = Math.max(0, y-half), y1 = Math.min(height-1, y+half);
+    const x0 = Math.max(0, x-half), x1 = Math.min(width-1, x+half);
+    let sum = 0, count = 0;
+    for(let yy=y0; yy<=y1; yy++){
+      const base = yy*width;
+      for(let xx=x0; xx<=x1; xx++){ sum += mask[base+xx]; count++; }
+    }
+    return count ? sum/count : 0;
+  }
+
+  const means = [];
+  const coords = [];
+  for(let c=0;c<cols;c++){
+    const [, cx] = cellCenter(0, c);
+    means.push(patchMean(Math.round(top), Math.round(cx))); coords.push([0, c]);
+    const [, cx2] = cellCenter(rows-1, c);
+    means.push(patchMean(Math.round(bottom), Math.round(cx2))); coords.push([rows-1, c]);
+  }
+  for(let r=0;r<rows;r++){
+    const [cy, ] = cellCenter(r, 0);
+    means.push(patchMean(Math.round(cy), Math.round(left))); coords.push([r, 0]);
+    const [cy2, ] = cellCenter(r, cols-1);
+    means.push(patchMean(Math.round(cy2), Math.round(right))); coords.push([r, cols-1]);
+  }
+
+  let cutoff = wallCutoff;
+  if(cutoff === null || cutoff === undefined){
+    const sorted = [...means].sort((a,b)=>a-b);
+    const median = sorted[Math.floor(sorted.length/2)];
+    cutoff = median > 0 ? median * 0.6 : 0.15;
+  }
+
+  const gaps = [];
+  for(let i=0;i<means.length;i++){
+    if(means[i] <= cutoff) gaps.push(coords[i]);
+  }
+  return gaps;
+}
+
+// Fraction of open cells belonging to the single largest connected
+// region. A clean maze parse should score close to 1.0 (basically
+// every open cell reachable from every other); a low score usually
+// means the grid resolution doesn't match the image's actual cell
+// size, so this doubles as a sanity check for auto-detected sizes.
+function largestComponentFraction(cellGrid, rows, cols){
+  const openCells = [];
+  for(let r=0;r<rows;r++) for(let c=0;c<cols;c++) if(cellGrid[r][c]==='open') openCells.push(r*cols+c);
+  if(openCells.length === 0) return 0;
+  const seen = new Set();
+  let largest = 0;
+  for(const cellKey of openCells){
+    if(seen.has(cellKey)) continue;
+    let size = 0;
+    const stack = [cellKey];
+    seen.add(cellKey);
+    while(stack.length){
+      const k = stack.pop();
+      size++;
+      const r = Math.floor(k/cols), c = k%cols;
+      for(const [nr,nc] of [[r-1,c],[r+1,c],[r,c-1],[r,c+1]]){
+        if(nr>=0 && nr<rows && nc>=0 && nc<cols && cellGrid[nr][nc]==='open'){
+          const nk = nr*cols+nc;
+          if(!seen.has(nk)){ seen.add(nk); stack.push(nk); }
+        }
+      }
+    }
+    largest = Math.max(largest, size);
+  }
+  return largest / openCells.length;
+}
+
+// --------------------------------------------------------------------
+// "Solid blocks" maze parsing: each cell is directly classified open
+// or wall from its average brightness. Auto-detects the right cell
+// resolution when auto-detect is checked — some block mazes have one
+// grid cell per room with walls occupying separate cells of their own
+// (a "doubled lattice", resolution 2N+1 — equal wall/corridor
+// thickness usually means this); others have thin walls relative to
+// wide corridors and just need N cells directly. Both candidates are
+// tried and whichever gives a single fully connected open region wins.
+// --------------------------------------------------------------------
+
+function classifyBlocksGrid(sourceCanvas, rows, cols, box){
+  const canvas = document.createElement('canvas');
+  canvas.width = cols;
+  canvas.height = rows;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  // Draw only the cropped maze region (ignoring any surrounding text
+  // labels) scaled down to one pixel per cell. sourceCanvas is in the
+  // same coordinate space as the mask/box, unlike the original <img>
+  // (which buildWallMask may have downscaled from).
+  const sx = box.left, sy = box.top, sw = box.right-box.left+1, sh = box.bottom-box.top+1;
+  ctx.drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, cols, rows);
+  const data = ctx.getImageData(0, 0, cols, rows).data;
+
+  const invert = invertCheckbox.checked;
+  const threshold = Number(thresholdInput.value);
+
+  const cellGrid = [];
+  const rgbGrid = [];
+  for(let r=0;r<rows;r++){
+    const gridRow = [];
+    const rgbRow = [];
+    for(let c=0;c<cols;c++){
+      const idx = (r*cols + c) * 4;
+      const red = data[idx], green = data[idx+1], blue = data[idx+2];
+      const gray = 0.299*red + 0.587*green + 0.114*blue;
+      const isOpen = invert ? gray < threshold : gray > threshold;
+      gridRow.push(isOpen ? 'open' : 'wall');
+      rgbRow.push([red, green, blue]);
+    }
+    cellGrid.push(gridRow);
+    rgbGrid.push(rgbRow);
+  }
+  return { cellGrid, rgbGrid };
+}
+
+function loadMazeFromImageBlocks(img){
+  const { mask, width, height, canvas: sourceCanvas } = buildWallMask(img, 1400);
+  const box = findBoundingBox(mask, width, height);
+  if(!box){
+    statusEl.innerHTML = '<span class="fail">// no dark pixels found — try "invert colors" or adjust threshold</span>';
+    return;
+  }
+
+  let candidates;
+  if(autoGridCheckbox.checked){
+    const detected = detectGridSize(mask, width, box);
+    if(!detected){
+      statusEl.innerHTML = '<span class="fail">// could not auto-detect the cell grid — uncheck auto-detect and set rows/cols manually</span>';
+      return;
+    }
+    // Try the doubled-lattice interpretation first (stricter structural
+    // match — a real spanning-tree maze scores ~1.0 connectivity only
+    // at the resolution that matches its actual wall/room layout),
+    // fall back to the plain N x N guess.
+    candidates = [
+      [2*detected.rows + 1, 2*detected.cols + 1],
+      [detected.rows, detected.cols],
+    ];
+  } else {
+    readDimensions();
+    candidates = [[ROWS, COLS]];
+  }
+
+  let best = null;
+  for(const [candRows, candCols] of candidates){
+    const { cellGrid, rgbGrid } = classifyBlocksGrid(sourceCanvas, candRows, candCols, box);
+    const frac = largestComponentFraction(cellGrid, candRows, candCols);
+    if(!best || frac > best.frac) best = { frac, rows: candRows, cols: candCols, cellGrid, rgbGrid };
+    if(frac > 0.98) break;
+  }
+
+  ROWS = best.rows; COLS = best.cols;
+  grid = best.cellGrid;
+  rowsInput.value = ROWS;
+  colsInput.value = COLS;
+  buildDom();
+
+  const openCells = [];
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(grid[r][c]==='open') openCells.push([r,c]);
+  if(openCells.length === 0){
+    statusEl.innerHTML = '<span class="fail">// image parsed to an all-wall grid — try "invert colors" or adjust threshold</span>';
+    return;
+  }
+  const pickRandomOpen = () => openCells[Math.floor(Math.random()*openCells.length)];
+
+  const gaps = findBorderGaps(mask, width, height, box, ROWS, COLS, null);
+  let mazeStart = gaps[0] || null;
+  let mazeEnd = gaps[1] || null;
+
+  // Colored markers take precedence over border gaps when both exist
+  const markerStart = detectMarker(best.rgbGrid, 'green');
+  const markerEnd = detectMarker(best.rgbGrid, 'red');
+  if(markerStart) mazeStart = markerStart;
+  if(markerEnd) mazeEnd = markerEnd;
+
+  start = mazeStart || pickRandomOpen();
+  end = mazeEnd || pickRandomOpen();
+  let attempts = 0;
+  while(attempts < 30 && start[0]===end[0] && start[1]===end[1]){
+    end = pickRandomOpen();
+    attempts++;
+  }
+
+  grid[start[0]][start[1]] = 'open';
+  grid[end[0]][end[1]] = 'open';
+
+  render();
+
+  statusEl.innerHTML = `// loaded maze from image (${ROWS}x${COLS}, connectivity ${Math.round(best.frac*100)}%) — `
+    + `${gaps.length} border gap(s) found`;
+}
+
+function detectMarker(rgbGrid, colorName, minDominance = 28){
+  let best = null;
+  let bestScore = minDominance; // must clear this bar to count as "marked"
+  for(let r=0;r<rgbGrid.length;r++){
+    for(let c=0;c<rgbGrid[0].length;c++){
+      const [red, green, blue] = rgbGrid[r][c];
+      const score = colorName === 'green'
+        ? green - Math.max(red, blue)
+        : red - Math.max(green, blue);
+      if(score > bestScore){
+        bestScore = score;
+        best = [r, c];
+      }
+    }
+  }
+  return best;
+}
+
+// --------------------------------------------------------------------
+// Thin-line maze parsing ("classic kids'-puzzle" style: walls are line
+// segments on a grid, not filled blocks). Mirrors the approach used in
+// the Python version: build a boolean wall-pixel mask at full image
+// resolution, find the maze's bounding box, sample the pixel patch
+// BETWEEN each pair of adjacent cells to tell if a wall line crosses
+// there, and detect entrance/exit as gaps in the outer border.
+// --------------------------------------------------------------------
+
+function loadMazeFromImageLines(img){
+  const { mask, width, height } = buildWallMask(img, 1400);
+  const box = findBoundingBox(mask, width, height);
+  if(!box){
+    statusEl.innerHTML = '<span class="fail">// no dark pixels found — try "invert colors" or adjust threshold</span>';
+    return;
+  }
+  const { top, bottom, left, right } = box;
+
+  let rows, cols;
+  if(autoGridCheckbox.checked){
+    const detected = detectGridSize(mask, width, box);
+    if(detected){
+      rows = detected.rows; cols = detected.cols;
+      rowsInput.value = rows; colsInput.value = cols;
+    } else {
+      statusEl.innerHTML = '<span class="fail">// could not auto-detect the cell grid — uncheck auto-detect and set rows/cols manually</span>';
+      return;
+    }
+  } else {
+    rows = parseInt(rowsInput.value, 10) || 21;
+    cols = parseInt(colsInput.value, 10) || 31;
+  }
+
+  const cellH = (bottom - top + 1) / rows;
+  const cellW = (right - left + 1) / cols;
+  const half = Math.max(1, Math.floor(Math.min(cellH, cellW) * 0.15));
+  // Sits right in the gap between "no wall pixels in the sample patch"
+  // (~0.0 mean) and "wall line present" (~0.2-0.3 mean coverage).
+  const wallCutoff = 0.15;
+
+  function cellCenter(r, c){
+    return [top + (r + 0.5) * cellH, left + (c + 0.5) * cellW];
+  }
+  function patchMean(y, x){
+    const y0 = Math.max(0, y-half), y1 = Math.min(height-1, y+half);
+    const x0 = Math.max(0, x-half), x1 = Math.min(width-1, x+half);
+    let sum = 0, count = 0;
+    for(let yy=y0; yy<=y1; yy++){
+      const base = yy*width;
+      for(let xx=x0; xx<=x1; xx++){ sum += mask[base+xx]; count++; }
+    }
+    return count ? sum/count : 0;
+  }
+
+  ROWS = 2*rows + 1;
+  COLS = 2*cols + 1;
+  buildDom();
+  grid = Array.from({length: ROWS}, () => Array(COLS).fill('wall'));
+
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      grid[2*r+1][2*c+1] = 'open'; // room interiors are always open
+    }
+  }
+
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols-1;c++){
+      const [cy, cx1] = cellCenter(r, c);
+      const [, cx2] = cellCenter(r, c+1);
+      const bx = (cx1+cx2)/2;
+      const isWall = patchMean(Math.round(cy), Math.round(bx)) > wallCutoff;
+      grid[2*r+1][2*c+2] = isWall ? 'wall' : 'open';
+    }
+  }
+  for(let r=0;r<rows-1;r++){
+    for(let c=0;c<cols;c++){
+      const [cy1, cx] = cellCenter(r, c);
+      const [cy2, ] = cellCenter(r+1, c);
+      const by = (cy1+cy2)/2;
+      const isWall = patchMean(Math.round(by), Math.round(cx)) > wallCutoff;
+      grid[2*r+2][2*c+1] = isWall ? 'wall' : 'open';
+    }
+  }
+
+  const gaps = findBorderGaps(mask, width, height, box, rows, cols, wallCutoff);
+  const latticeGaps = gaps.map(([r,c]) => [2*r+1, 2*c+1]);
+
+  const openCells = [];
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(grid[r][c]==='open') openCells.push([r,c]);
+  const pickRandomOpen = () => openCells[Math.floor(Math.random()*openCells.length)];
+
+  start = latticeGaps[0] || pickRandomOpen();
+  end = latticeGaps[1] || pickRandomOpen();
+  let attempts = 0;
+  while(attempts < 30 && start[0]===end[0] && start[1]===end[1]){
+    end = pickRandomOpen();
+    attempts++;
+  }
+
+  grid[start[0]][start[1]] = 'open';
+  grid[end[0]][end[1]] = 'open';
+
+  render();
+
+  const gapNote = gaps.length === 2
+    ? `found 2 border gaps for entrance/exit`
+    : `found ${gaps.length} border gap(s) — used a random reachable pair where needed`;
+  statusEl.innerHTML = `// loaded line-maze (${rows}x${cols} cells) — ${gapNote}`;
+}
+
+function render(){
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const el = cellEls[r][c];
+      el.className = 'cell' + (grid[r][c]==='wall' ? ' wall' : '');
+    }
+  }
+  cellEls[start[0]][start[1]].classList.add('start');
+  cellEls[end[0]][end[1]].classList.add('end');
+}
+
+function key(r,c){ return r*COLS+c; }
+
+function neighbors(r,c){
+  return [[r-1,c],[r+1,c],[r,c-1],[r,c+1]]
+    .filter(([nr,nc]) => nr>=0 && nr<ROWS && nc>=0 && nc<COLS && grid[nr][nc]==='open');
+}
+
+function heuristic(r,c){
+  return Math.abs(r-end[0]) + Math.abs(c-end[1]);
+}
+
+// Generator-based search so we can animate step by step
+function* searchGen(algo){
+  const cameFrom = new Map();
+  const visited = new Set([key(...start)]);
+  cameFrom.set(key(...start), null);
+
+  if(algo === 'dfs'){
+    const stack = [start];
+    while(stack.length){
+      const [r,c] = stack.pop();
+      yield {type:'visit', r, c};
+      if(r===end[0] && c===end[1]){ yield {type:'found', cameFrom}; return; }
+      for(const [nr,nc] of neighbors(r,c)){
+        const k = key(nr,nc);
+        if(!visited.has(k)){
+          visited.add(k);
+          cameFrom.set(k, [r,c]);
+          stack.push([nr,nc]);
+        }
+      }
+    }
+  } else if(algo === 'bfs'){
+    const queue = [start];
+    let qi = 0;
+    while(qi < queue.length){
+      const [r,c] = queue[qi++];
+      yield {type:'visit', r, c};
+      if(r===end[0] && c===end[1]){ yield {type:'found', cameFrom}; return; }
+      for(const [nr,nc] of neighbors(r,c)){
+        const k = key(nr,nc);
+        if(!visited.has(k)){
+          visited.add(k);
+          cameFrom.set(k, [r,c]);
+          queue.push([nr,nc]);
+        }
+      }
+    }
+  } else { // A*
+    const gScore = new Map([[key(...start), 0]]);
+    const open = [[heuristic(...start), start]];
+    while(open.length){
+      open.sort((a,b) => a[0]-b[0]);
+      const [, [r,c]] = open.shift();
+      yield {type:'visit', r, c};
+      if(r===end[0] && c===end[1]){ yield {type:'found', cameFrom}; return; }
+      for(const [nr,nc] of neighbors(r,c)){
+        const k = key(nr,nc);
+        const tentative = gScore.get(key(r,c)) + 1;
+        if(!gScore.has(k) || tentative < gScore.get(k)){
+          gScore.set(k, tentative);
+          cameFrom.set(k, [r,c]);
+          if(!visited.has(k)){
+            visited.add(k);
+            open.push([tentative + heuristic(nr,nc), [nr,nc]]);
+          }
+        }
+      }
+    }
+  }
+  yield {type:'exhausted'};
+}
+
+function delayForSpeed(){
+  const v = Number(speedInput.value); // 1..10
+  return Math.max(2, 40 - v*4);
+}
+
+async function solve(){
+  if(running) return;
+  running = true;
+  solveBtn.disabled = true;
+  generateBtn.disabled = true;
+  render(); // reset visuals
+
+  const algo = algoSelect.value;
+  statusEl.textContent = `// running ${algo.toUpperCase()}...`;
+  const gen = searchGen(algo);
+  let visitedCount = 0;
+
+  for(const step of gen){
+    if(step.type === 'visit'){
+      const el = cellEls[step.r][step.c];
+      if(!el.classList.contains('start') && !el.classList.contains('end')){
+        el.classList.remove('frontier');
+        el.classList.add('visiting');
+        setTimeout(() => {
+          if(el.classList.contains('visiting')){
+            el.classList.remove('visiting');
+            el.classList.add('frontier');
+          }
+        }, 220);
+      }
+      visitedCount++;
+      await new Promise(res => setTimeout(res, delayForSpeed()));
+    } else if(step.type === 'found'){
+      const path = [];
+      let cur = key(end[0], end[1]);
+      const cameFrom = step.cameFrom;
+      let pos = end;
+      const chain = [pos];
+      while(true){
+        const k = key(pos[0], pos[1]);
+        const prev = cameFrom.get(k);
+        if(!prev) break;
+        chain.push(prev);
+        pos = prev;
+      }
+      chain.reverse();
+      for(const [r,c] of chain){
+        const el = cellEls[r][c];
+        if(!el.classList.contains('start') && !el.classList.contains('end')){
+          el.classList.add('path');
+        }
+        await new Promise(res => setTimeout(res, 12));
+      }
+      statusEl.innerHTML = `<span class="ok">// solved</span> — ${chain.length} steps, ${visitedCount} cells explored`;
+    } else if(step.type === 'exhausted'){
+      statusEl.innerHTML = `<span class="fail">// no path exists</span> — ${visitedCount} cells explored`;
+    }
+  }
+
+  running = false;
+  solveBtn.disabled = false;
+  generateBtn.disabled = false;
+}
+
+generateBtn.addEventListener('click', generateMaze);
+solveBtn.addEventListener('click', solve);
+
+generateMaze();
+</script>
+</body>
+</html>
